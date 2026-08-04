@@ -179,7 +179,8 @@ function calculateMetrics(account) {
   const averageMealPrice = Number.isFinite(cheapestWeekPrice) ? cheapestWeekPrice / Math.max(1, state.mealCount) : 0;
   const expiryDays = daysUntil(account.offerExpiry);
   const offerExpiring = expiryDays !== null && expiryDays <= state.expiryWindowDays;
-  const isAvailable = account.isSubscribed && remainingBoxCount > 0;
+  const hasConfiguredPrice = toNumber(account.boxPrice, 0) > 0 || toNumber(account.shipping, 0) > 0;
+  const isAvailable = account.isSubscribed && remainingBoxCount > 0 && hasConfiguredPrice;
 
   let priorityScore = 0;
   if (offerExpiring) priorityScore += 100;
@@ -396,7 +397,7 @@ function importData(event) {
 
 function createAccount(overrides = {}) {
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     discountMode: "euro",
     name: "",
     boxPrice: 0,
@@ -436,7 +437,7 @@ function normalizeAccount(account, index) {
   while (completedCycles.length < boxCount) completedCycles.push(false);
 
   return createAccount({
-    id: account.id || crypto.randomUUID(),
+    id: account.id || createId(),
     name: account.name || String.fromCharCode(65 + index),
     boxPrice,
     shipping: toNumber(account.shipping, 0),
@@ -464,6 +465,14 @@ function daysUntil(dateValue) {
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function createId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function getAccountLabel(account) {
