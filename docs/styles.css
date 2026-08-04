@@ -161,7 +161,7 @@ select {
 
 table {
   border-collapse: collapse;
-  min-width: 1240px;
+  min-width: 1260px;
   width: 100%;
 }
 
@@ -187,22 +187,70 @@ td select + input {
   margin-top: 0.4rem;
 }
 
-.cycle-discounts {
+.cycle-grid {
   display: grid;
   gap: 0.35rem;
   grid-template-columns: repeat(4, minmax(3rem, 1fr));
 }
 
-.cycle-discounts label {
+.cycle-grid label,
+.week-control span,
+.cycle-finals span {
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.week-control {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem;
+}
+
+.week-control > span {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.week-control input[type="text"] {
+  min-height: 2rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.week-control label {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.week-control input[type="checkbox"] {
+  margin: 0;
+  min-height: auto;
+  width: auto;
+}
+
+.cycle-finals span {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  min-height: 2.4rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.cycle-finals span.is-cycle-done {
+  color: var(--muted);
+  opacity: 0.6;
+  text-decoration: line-through;
 }
 
 tr.is-winner {
   background: rgba(22, 124, 84, 0.1);
 }
 
-tr.is-deactivated {
+tr.is-unsubscribed {
   opacity: 0.72;
 }
 
@@ -233,7 +281,7 @@ tr.is-deactivated {
   background: var(--blue);
 }
 
-.status-deactivated {
+.status-unsubscribed {
   background: #6b6f6a;
 }
 
