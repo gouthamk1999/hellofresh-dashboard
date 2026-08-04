@@ -10,7 +10,7 @@
     <header class="topbar">
       <div>
         <p class="eyebrow">HelloFresh planner</p>
-        <h1>Account cost dashboard</h1>
+        <h1>Account cycle dashboard</h1>
       </div>
       <div class="topbar__actions">
         <button id="exportButton" type="button">Export JSON</button>
@@ -23,21 +23,21 @@
     </header>
 
     <main>
-      <section class="summary-grid" aria-label="Weekly summary">
+      <section class="summary-grid" aria-label="Offer summary">
         <article>
           <span>Best account</span>
           <strong id="bestAccount">-</strong>
         </article>
         <article>
-          <span>Lowest final price</span>
+          <span>Cheapest remaining week</span>
           <strong id="lowestPrice">-</strong>
         </article>
         <article>
-          <span>Price per meal</span>
+          <span>Cheapest week per meal</span>
           <strong id="bestMealPrice">-</strong>
         </article>
         <article>
-          <span>Potential saving</span>
+          <span>Weekly saving</span>
           <strong id="savingAmount">-</strong>
         </article>
       </section>
@@ -48,7 +48,7 @@
           <input id="currencyInput" type="text" maxlength="4" value="€" />
         </label>
         <label>
-          Meals this week
+          Meals per week
           <input id="mealCountInput" type="number" min="1" step="1" value="6" />
         </label>
         <label>
@@ -63,17 +63,18 @@
           <thead>
             <tr>
               <th>Account</th>
-              <th>Box</th>
-              <th>Shipping</th>
-              <th>Current cycle</th>
-              <th>Cycle discounts</th>
-              <th>Credit balance</th>
-              <th>Expiry</th>
-              <th>Inactive</th>
-              <th>Final</th>
-              <th>Per meal</th>
-              <th>Priority</th>
               <th>Status</th>
+              <th>Week price</th>
+              <th>Shipping</th>
+              <th>Credit balance</th>
+              <th>Free dessert</th>
+              <th>Offer expiry</th>
+              <th>Weeks</th>
+              <th>Final week prices</th>
+              <th>Cheapest week</th>
+              <th>Avg per meal</th>
+              <th>Priority</th>
+              <th>Notes</th>
               <th></th>
             </tr>
           </thead>
@@ -84,7 +85,7 @@
       <section class="notes-panel">
         <div>
           <h2>Decision rules</h2>
-          <p>The dashboard ranks accounts by final cost and urgency. Discounts or credits expiring soon raise priority so you can avoid losing value.</p>
+          <p>The dashboard compares remaining weeks in each subscribed account. Mark used weeks as done so they are excluded from cheapest-week ranking and credit is applied to the next available week.</p>
         </div>
         <ul id="actionList"></ul>
       </section>
@@ -94,38 +95,26 @@
       <tr>
         <td data-label="Account">
           <input data-field="name" type="text" placeholder="Account A" />
-          <input data-field="notes" type="text" placeholder="Notes" />
         </td>
-        <td data-label="Box"><input data-field="boxPrice" type="number" min="0" step="0.01" /></td>
-        <td data-label="Shipping"><input data-field="shipping" type="number" min="0" step="0.01" /></td>
-        <td data-label="Current cycle">
-          <select data-field="currentCycle">
-            <option value="1">Box 1</option>
-            <option value="2">Box 2</option>
-            <option value="3">Box 3</option>
-            <option value="4">Box 4</option>
+        <td data-label="Status"><span data-output="status" class="status-pill"></span></td>
+        <td data-label="Week price"><input data-field="boxPrice" type="text" inputmode="decimal" /></td>
+        <td data-label="Shipping"><input data-field="shipping" type="text" inputmode="decimal" /></td>
+        <td data-label="Credit balance"><input data-field="creditBalance" type="text" inputmode="decimal" /></td>
+        <td data-label="Free dessert">
+          <select data-field="freeDessert">
+            <option value="false">No</option>
+            <option value="true">Yes</option>
           </select>
         </td>
-        <td data-label="Cycle discounts">
-          <div class="cycle-discounts">
-            <label>1 <input data-cycle-index="0" type="number" min="0" max="100" step="0.01" /></label>
-            <label>2 <input data-cycle-index="1" type="number" min="0" max="100" step="0.01" /></label>
-            <label>3 <input data-cycle-index="2" type="number" min="0" max="100" step="0.01" /></label>
-            <label>4 <input data-cycle-index="3" type="number" min="0" max="100" step="0.01" /></label>
-          </div>
-        </td>
-        <td data-label="Credit balance"><input data-field="creditBalance" type="number" min="0" step="0.01" /></td>
-        <td data-label="Expiry">
-          <input data-field="promoExpiry" type="date" />
-          <input data-field="creditExpiry" type="date" />
-        </td>
-        <td data-label="Inactive"><input data-field="weeksInactive" type="number" min="0" step="1" /></td>
-        <td data-label="Final"><strong data-output="finalPrice"></strong></td>
-        <td data-label="Per meal"><strong data-output="pricePerMeal"></strong></td>
+        <td data-label="Offer expiry"><input data-field="offerExpiry" type="date" /></td>
+        <td data-label="Weeks"><div class="cycle-grid cycle-controls"></div></td>
+        <td data-label="Final week prices"><div data-output="cycleFinals" class="cycle-grid cycle-finals"></div></td>
+        <td data-label="Cheapest week"><strong data-output="cheapestWeek"></strong></td>
+        <td data-label="Avg per meal"><strong data-output="averageMealPrice"></strong></td>
         <td data-label="Priority"><strong data-output="priorityScore"></strong></td>
-        <td data-label="Status"><span data-output="status" class="status-pill"></span></td>
+        <td data-label="Notes"><input data-field="notes" type="text" placeholder="Notes" /></td>
         <td class="row-actions">
-          <button data-action="toggle-active" class="icon-button" type="button"></button>
+          <button data-action="toggle-subscription" class="icon-button" type="button"></button>
           <button data-action="delete" class="icon-button" type="button" aria-label="Delete account">Delete</button>
         </td>
       </tr>
