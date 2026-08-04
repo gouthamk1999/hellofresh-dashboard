@@ -161,7 +161,7 @@ select {
 
 table {
   border-collapse: collapse;
-  min-width: 1180px;
+  min-width: 1240px;
   width: 100%;
 }
 
@@ -187,8 +187,23 @@ td select + input {
   margin-top: 0.4rem;
 }
 
+.cycle-discounts {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(4, minmax(3rem, 1fr));
+}
+
+.cycle-discounts label {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 tr.is-winner {
   background: rgba(22, 124, 84, 0.1);
+}
+
+tr.is-deactivated {
+  opacity: 0.72;
 }
 
 .status-pill {
@@ -218,6 +233,10 @@ tr.is-winner {
   background: var(--blue);
 }
 
+.status-deactivated {
+  background: #6b6f6a;
+}
+
 .icon-button {
   background: transparent;
   border: 1px solid var(--line);
@@ -226,6 +245,11 @@ tr.is-winner {
 
 .icon-button:hover {
   background: #f0e7d9;
+}
+
+.row-actions {
+  display: grid;
+  gap: 0.4rem;
 }
 
 .notes-panel {
