@@ -63,30 +63,32 @@ const rowTemplate = document.querySelector("#accountRowTemplate");
 const currencyInput = document.querySelector("#currencyInput");
 const mealCountInput = document.querySelector("#mealCountInput");
 const expiryWindowInput = document.querySelector("#expiryWindowInput");
+const baselineBoxPriceInput = document.querySelector("#baselineBoxPriceInput");
 const authStatus = document.querySelector("#authStatus");
+const cloudStatus = document.querySelector("#cloudStatus");
 const authEmailInput = document.querySelector("#authEmailInput");
 const authPasswordInput = document.querySelector("#authPasswordInput");
 const signInButton = document.querySelector("#signInButton");
-const signUpButton = document.querySelector("#signUpButton");
 const signOutButton = document.querySelector("#signOutButton");
 
 currencyInput.value = state.currency;
 mealCountInput.value = state.mealCount;
 expiryWindowInput.value = state.expiryWindowDays;
+baselineBoxPriceInput.value = state.baselineBoxPrice;
 
 document.querySelector("#addAccountButton").addEventListener("click", addAccount);
 document.querySelector("#resetButton").addEventListener("click", resetData);
 document.querySelector("#exportButton").addEventListener("click", exportData);
 document.querySelector("#importInput").addEventListener("change", importData);
 signInButton.addEventListener("click", signIn);
-signUpButton.addEventListener("click", signUp);
 signOutButton.addEventListener("click", signOut);
 
-[currencyInput, mealCountInput, expiryWindowInput].forEach((input) => {
+[currencyInput, mealCountInput, expiryWindowInput, baselineBoxPriceInput].forEach((input) => {
   input.addEventListener("input", () => {
     state.currency = currencyInput.value || "€";
     state.mealCount = toNumber(mealCountInput.value, 1);
     state.expiryWindowDays = toNumber(expiryWindowInput.value, 7);
+    state.baselineBoxPrice = toNumber(baselineBoxPriceInput.value, 0);
     saveAndRender();
   });
 });
@@ -115,6 +117,7 @@ function createState(accounts, overrides = {}) {
     currency: overrides.currency || "€",
     mealCount: toNumber(overrides.mealCount, 6),
     expiryWindowDays: toNumber(overrides.expiryWindowDays, 7),
+    baselineBoxPrice: toNumber(overrides.baselineBoxPrice, 0),
     accounts
   };
 }
@@ -128,12 +131,14 @@ function saveAndRender() {
 async function initAuth() {
   if (!supabaseClient) {
     setAuthStatus("Add your Supabase URL and anon key in app.js to enable cloud sync.");
+    setCloudStatus("Local only", "idle");
     return;
   }
 
   const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
     setAuthStatus(error.message);
+    setCloudStatus("Auth error", "error");
     return;
   }
 
@@ -148,27 +153,23 @@ async function initAuth() {
   });
 }
 
-async function signUp() {
-  const credentials = getAuthCredentials();
-  if (!credentials) return;
-
-  const { error } = await supabaseClient.auth.signUp(credentials);
-  setAuthStatus(error ? error.message : "Account created. Check your email if confirmation is enabled.");
-}
-
 async function signIn() {
   const credentials = getAuthCredentials();
   if (!credentials) return;
 
   const { error } = await supabaseClient.auth.signInWithPassword(credentials);
   setAuthStatus(error ? error.message : "Signed in. Loading saved dashboard...");
+  setCloudStatus(error ? "Sign-in failed" : "Loading...", error ? "error" : "saving");
 }
 
 async function signOut() {
   if (!supabaseClient) return;
 
   const { error } = await supabaseClient.auth.signOut();
-  if (error) setAuthStatus(error.message);
+  if (error) {
+    setAuthStatus(error.message);
+    setCloudStatus("Sign-out failed", "error");
+  }
 }
 
 function getAuthCredentials() {
@@ -191,20 +192,28 @@ function renderAuthState() {
   const isSignedIn = Boolean(currentUser);
   authEmailInput.disabled = isSignedIn;
   authPasswordInput.disabled = isSignedIn;
+  authEmailInput.hidden = isSignedIn;
+  authPasswordInput.hidden = isSignedIn;
   signInButton.hidden = isSignedIn;
-  signUpButton.hidden = isSignedIn;
   signOutButton.hidden = !isSignedIn;
-  setAuthStatus(isSignedIn ? `Signed in as ${currentUser.email}. Cloud sync is on.` : "Signed out. Changes are saved in this browser only.");
+  setAuthStatus(isSignedIn ? currentUser.email : "Cloud sync");
+  setCloudStatus(isSignedIn ? "Saved" : "Local only", "idle");
 }
 
 function setAuthStatus(message) {
   authStatus.textContent = message;
 }
 
+function setCloudStatus(message, status = "idle") {
+  cloudStatus.textContent = message;
+  cloudStatus.dataset.status = status;
+}
+
 function queueCloudSave() {
   if (!supabaseClient || !currentUser || isApplyingCloudState) return;
 
   clearTimeout(cloudSaveTimer);
+  setCloudStatus("Saving...", "saving");
   cloudSaveTimer = setTimeout(saveCloudState, 600);
 }
 
@@ -215,7 +224,8 @@ async function saveCloudState() {
     .from("dashboards")
     .upsert({ user_id: currentUser.id, state, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
 
-  setAuthStatus(error ? error.message : `Signed in as ${currentUser.email}. Saved to Supabase.`);
+  setAuthStatus(error ? error.message : currentUser.email);
+  setCloudStatus(error ? "Save failed" : "Saved", error ? "error" : "saved");
 }
 
 async function loadCloudState() {
@@ -229,6 +239,7 @@ async function loadCloudState() {
 
   if (error) {
     setAuthStatus(error.message);
+    setCloudStatus("Load failed", "error");
     return;
   }
 
@@ -242,7 +253,8 @@ async function loadCloudState() {
   localStorage.setItem(storageKey, JSON.stringify(state));
   render();
   isApplyingCloudState = false;
-  setAuthStatus(`Signed in as ${currentUser.email}. Loaded from Supabase.`);
+  setAuthStatus(currentUser.email);
+  setCloudStatus("Saved", "saved");
 }
 
 function applyState(nextState) {
@@ -250,10 +262,12 @@ function applyState(nextState) {
   state.currency = normalizedState.currency;
   state.mealCount = normalizedState.mealCount;
   state.expiryWindowDays = normalizedState.expiryWindowDays;
+  state.baselineBoxPrice = normalizedState.baselineBoxPrice;
   state.accounts = normalizedState.accounts;
   currencyInput.value = state.currency;
   mealCountInput.value = state.mealCount;
   expiryWindowInput.value = state.expiryWindowDays;
+  baselineBoxPriceInput.value = state.baselineBoxPrice;
 }
 
 function render() {
@@ -271,12 +285,17 @@ function render() {
     row.dataset.id = account.id;
     row.classList.toggle("is-winner", isBestSubscribed);
     row.classList.toggle("is-unsubscribed", !account.isSubscribed);
+    row.classList.toggle("is-inactive", !account.isSubscribed || metrics.remainingBoxCount === 0);
 
     row.querySelectorAll("[data-field]").forEach((field) => {
       const key = field.dataset.field;
-      field.value = ["freeDessert", "isNewAccount"].includes(key) ? String(Boolean(account[key])) : account[key] ?? "";
+      if (field.type === "checkbox") {
+        field.checked = Boolean(account[key]);
+      } else {
+        field.value = account[key] ?? "";
+      }
       field.disabled = !account.isSubscribed;
-      field.addEventListener("change", () => updateAccount(account.id, key, field.value));
+      field.addEventListener("change", () => updateAccount(account.id, key, field.type === "checkbox" ? field.checked : field.value));
     });
 
     row.querySelector(".cycle-controls").replaceChildren(...account.cycleDiscounts.map((discountValue, cycleIndex) => createWeekControl(account, discountValue, cycleIndex)));
@@ -349,6 +368,7 @@ function calculateMetrics(account) {
 
   return {
     cycleFinalPrices,
+    completedCycles: account.completedCycles,
     remainingBoxCount,
     totalPrice,
     cheapestWeekPrice,
@@ -365,6 +385,15 @@ function renderSummary(rankedAccounts) {
   const subscribedAccounts = rankedAccounts.filter(({ metrics }) => metrics.isAvailable);
   const best = subscribedAccounts[0];
   const worst = subscribedAccounts[subscribedAccounts.length - 1];
+  const baselineBoxPrice = toNumber(state.baselineBoxPrice, 0);
+  const baselineSaving = best && baselineBoxPrice > 0 ? Math.max(0, baselineBoxPrice - best.metrics.nextWeekPrice) : null;
+  const cycleSaving = baselineBoxPrice > 0
+    ? subscribedAccounts.reduce((total, { metrics }) => {
+      return total + metrics.cycleFinalPrices.reduce((cycleTotal, price, cycleIndex) => {
+        return metrics.completedCycles[cycleIndex] ? cycleTotal : cycleTotal + Math.max(0, baselineBoxPrice - price);
+      }, 0);
+    }, 0)
+    : null;
 
   document.querySelector("#bestAccount").textContent = best ? getAccountLabel(best.account) : "-";
   document.querySelector("#lowestPrice").textContent = best ? withDessert(best.metrics.nextWeekLabel, best.account) : "-";
@@ -372,6 +401,8 @@ function renderSummary(rankedAccounts) {
   document.querySelector("#savingAmount").textContent = best && worst
     ? formatMoney(Math.max(0, worst.metrics.nextWeekPrice - best.metrics.nextWeekPrice))
     : "-";
+  document.querySelector("#baselineSaving").textContent = baselineSaving === null ? "-" : formatMoney(baselineSaving);
+  document.querySelector("#cycleSaving").textContent = cycleSaving === null ? "-" : formatMoney(cycleSaving);
 }
 
 function renderActions(rankedAccounts) {
@@ -453,7 +484,7 @@ function updateAccount(id, key, value) {
   if (!account) return;
 
   account[key] = ["freeDessert", "isNewAccount"].includes(key)
-    ? value === "true"
+    ? Boolean(value)
     : ["boxPrice", "shipping", "creditBalance"].includes(key)
       ? toNumber(value, 0)
       : value;
@@ -522,10 +553,12 @@ function resetData() {
   state.currency = "€";
   state.mealCount = 6;
   state.expiryWindowDays = 7;
+  state.baselineBoxPrice = 0;
   state.accounts = sampleAccounts.map((account) => createAccount({ ...account, id: createId(), cycleDiscounts: [...account.cycleDiscounts], completedCycles: [...account.completedCycles] }));
   currencyInput.value = state.currency;
   mealCountInput.value = state.mealCount;
   expiryWindowInput.value = state.expiryWindowDays;
+  baselineBoxPriceInput.value = state.baselineBoxPrice;
   saveAndRender();
 }
 
@@ -550,10 +583,12 @@ function importData(event) {
       state.currency = importedState.currency || "€";
       state.mealCount = toNumber(importedState.mealCount, 6);
       state.expiryWindowDays = toNumber(importedState.expiryWindowDays, 7);
+      state.baselineBoxPrice = toNumber(importedState.baselineBoxPrice, 0);
       state.accounts = Array.isArray(importedState.accounts) ? importedState.accounts.map(normalizeAccount) : state.accounts;
       currencyInput.value = state.currency;
       mealCountInput.value = state.mealCount;
       expiryWindowInput.value = state.expiryWindowDays;
+      baselineBoxPriceInput.value = state.baselineBoxPrice;
       saveAndRender();
     } catch {
       alert("That file does not look like dashboard JSON.");
