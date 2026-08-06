@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HelloFresh Account Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -29,15 +32,15 @@
           <strong id="bestAccount">-</strong>
         </article>
         <article>
-          <span>Cheapest remaining week</span>
+          <span>Next available week</span>
           <strong id="lowestPrice">-</strong>
         </article>
         <article>
-          <span>Cheapest week per meal</span>
+          <span>Next week per meal</span>
           <strong id="bestMealPrice">-</strong>
         </article>
         <article>
-          <span>Weekly saving</span>
+          <span>Next week saving</span>
           <strong id="savingAmount">-</strong>
         </article>
       </section>
@@ -66,12 +69,14 @@
               <th>Status</th>
               <th>Week price</th>
               <th>Shipping</th>
+              <th>New account</th>
+              <th>Discount type</th>
               <th>Credit balance</th>
               <th>Free dessert</th>
               <th>Offer expiry</th>
               <th>Weeks</th>
               <th>Final week prices</th>
-              <th>Cheapest week</th>
+              <th>Next week</th>
               <th>Avg per meal</th>
               <th>Priority</th>
               <th>Notes</th>
@@ -85,7 +90,7 @@
       <section class="notes-panel">
         <div>
           <h2>Decision rules</h2>
-          <p>The dashboard compares remaining weeks in each subscribed account. Mark used weeks as done so they are excluded from cheapest-week ranking and credit is applied to the next available week.</p>
+          <p>The dashboard compares the next available week in each subscribed account. Mark used weeks as done so credit is applied to the next week in serial order.</p>
         </div>
         <ul id="actionList"></ul>
       </section>
@@ -99,6 +104,18 @@
         <td data-label="Status"><span data-output="status" class="status-pill"></span></td>
         <td data-label="Week price"><input data-field="boxPrice" type="text" inputmode="decimal" /></td>
         <td data-label="Shipping"><input data-field="shipping" type="text" inputmode="decimal" /></td>
+        <td data-label="New account">
+          <select data-field="isNewAccount">
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
+        </td>
+        <td data-label="Discount type">
+          <select data-field="discountMode">
+            <option value="euro">Euro</option>
+            <option value="percent">%</option>
+          </select>
+        </td>
         <td data-label="Credit balance"><input data-field="creditBalance" type="text" inputmode="decimal" /></td>
         <td data-label="Free dessert">
           <select data-field="freeDessert">
@@ -109,7 +126,7 @@
         <td data-label="Offer expiry"><input data-field="offerExpiry" type="date" /></td>
         <td data-label="Weeks"><div class="cycle-grid cycle-controls"></div></td>
         <td data-label="Final week prices"><div data-output="cycleFinals" class="cycle-grid cycle-finals"></div></td>
-        <td data-label="Cheapest week"><strong data-output="cheapestWeek"></strong></td>
+        <td data-label="Next week"><strong data-output="cheapestWeek"></strong></td>
         <td data-label="Avg per meal"><strong data-output="averageMealPrice"></strong></td>
         <td data-label="Priority"><strong data-output="priorityScore"></strong></td>
         <td data-label="Notes"><input data-field="notes" type="text" placeholder="Notes" /></td>
