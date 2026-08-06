@@ -5,29 +5,42 @@ A static dashboard for comparing weekly HelloFresh account costs. It runs entire
 ## What it tracks
 
 - Account display name, such as A, B, C, or D
-- Week price, shipping, and account credit balance
-- New account yes/no flag, which removes shipping from week 1 when set to Yes
-- Free Dessert yes/no flag for each account
+- Box price, delivery fee, and account credit balance
+- New account checkbox, which removes the delivery fee from week 1 when checked
+- Free Dessert checkbox for each account
 - One offer expiry date for the full 4-week cycle
 - Four configurable discount amounts, either euros or percentages, one for each week in the cycle
 - Combined discount and done controls for each week
 - Calculated final price for each of the 4 weeks
-- Next available week, average price per meal, best account, priority score, and account status
+- Next available week, average price per meal, best account, baseline savings, cycle savings, and account status
 - Subscribe/unsubscribe account status. Resubscribing resets the account offer values for a new 4-week cycle
+- Optional Supabase account sign-in for permanent cloud storage
 
-Shipping is added to each week before discounts and credit are applied. When New account is set to **Yes**, shipping is ignored for week 1 only.
+Delivery fee is added to each week before discounts and credit are applied. When New account is checked, the delivery fee is ignored for week 1 only.
 
-When discount type is **%**, the percentage discount is calculated from the week price only; shipping is still added in full.
+When discount type is **%**, the percentage discount is calculated from the box price only; the delivery fee is still added in full.
 
 Credit balance is applied to the first available week. If credit remains, it is applied to the next available weeks in order. Weeks marked done are skipped. Accounts are compared by the next available week in serial order, not by a cheaper later week.
 
-When Free Dessert is set to **Yes**, the cheapest-week display shows a dessert marker.
+When Free Dessert is checked, the cheapest-week display shows a dessert marker.
 
-Data is saved in your browser with `localStorage`. Use **Export JSON** to keep a backup or move the data to another browser.
+Data is saved in your browser with `localStorage`. When you sign in with Supabase, the same dashboard state is also saved to your account for permanent storage. Use **Export JSON** to keep a manual backup or move the data without signing in.
+
+Use **Baseline box price** to compare the best available account against a normal full-price box. The dashboard shows the saving for the next box and the remaining 4-week cycle. The cloud status indicator shows whether Supabase sync is local-only, saving, saved, or failed.
 
 ## Run locally
 
 Open `index.html` in a browser.
+
+## Set up Supabase storage
+
+1. Create a Supabase project at <https://supabase.com>.
+2. In Supabase, open **SQL Editor** and run the SQL in `supabase-schema.sql`.
+3. Open **Project Settings → API** and copy the project URL and public anon key.
+4. In `app.js`, replace `YOUR_PROJECT_REF` and `YOUR_SUPABASE_ANON_KEY` in `supabaseConfig`.
+5. Open the dashboard, create an account, then sign in. Your dashboard JSON is saved to the `dashboards` table for that user.
+
+Only use the public anon key in this static app. Never paste the Supabase service role key into browser code.
 
 ## Host on GitHub Pages
 
