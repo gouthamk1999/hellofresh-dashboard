@@ -135,6 +135,38 @@ main {
   padding: 1.25rem clamp(1rem, 3vw, 3rem) 3rem;
 }
 
+.auth-panel {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(215, 223, 202, 0.95);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.2fr);
+  margin-bottom: 1.1rem;
+  padding: 1rem;
+}
+
+.auth-panel h2 {
+  color: var(--leaf-dark);
+  font-size: 1.25rem;
+  font-weight: 900;
+  margin: 0 0 0.35rem;
+}
+
+.auth-panel p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.auth-panel__form {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -413,7 +445,12 @@ tr.is-unsubscribed .cycle-finals span {
 
   .summary-grid,
   .controls,
+  .auth-panel,
   .notes-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-panel__form {
     grid-template-columns: 1fr;
   }
 }
