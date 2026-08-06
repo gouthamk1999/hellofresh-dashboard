@@ -4,12 +4,24 @@ A static dashboard for comparing weekly HelloFresh account costs. It runs entire
 
 ## What it tracks
 
-- Account email and browser/profile assignment
-- Box price, shipping, discount type, discount value, and wallet/refund credit
-- Promo and credit expiry dates
-- Weeks inactive, useful for watching potential return offers
-- Final price, price per meal, cheapest account, priority score, and pause recommendations
-- Priority bonuses for expiring promos, expiring credits, referral notes, 4+ inactive weeks, and the cheapest account
+- Account display name, such as A, B, C, or D
+- Week price, shipping, and account credit balance
+- New account yes/no flag, which removes shipping from week 1 when set to Yes
+- Free Dessert yes/no flag for each account
+- One offer expiry date for the full 4-week cycle
+- Four configurable discount amounts, either euros or percentages, one for each week in the cycle
+- Combined discount and done controls for each week
+- Calculated final price for each of the 4 weeks
+- Next available week, average price per meal, best account, priority score, and account status
+- Subscribe/unsubscribe account status. Resubscribing resets the account offer values for a new 4-week cycle
+
+Shipping is added to each week before discounts and credit are applied. When New account is set to **Yes**, shipping is ignored for week 1 only.
+
+When discount type is **%**, the percentage discount is calculated from the week price only; shipping is still added in full.
+
+Credit balance is applied to the first available week. If credit remains, it is applied to the next available weeks in order. Weeks marked done are skipped. Accounts are compared by the next available week in serial order, not by a cheaper later week.
+
+When Free Dessert is set to **Yes**, the cheapest-week display shows a dessert marker.
 
 Data is saved in your browser with `localStorage`. Use **Export JSON** to keep a backup or move the data to another browser.
 
@@ -29,4 +41,4 @@ The dashboard is static, so GitHub Pages is enough.
 
 ## Privacy note
 
-Do not commit your real account emails, saved JSON exports, or personal pricing details to a public repository. Keep real data in your browser or in a private repository.
+Do not commit saved JSON exports or personal pricing details to a public repository. Keep real data in your browser or in a private repository.
