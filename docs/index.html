@@ -26,6 +26,27 @@
     </header>
 
     <main>
+      <section class="auth-panel" aria-label="Cloud account">
+        <div>
+          <p class="eyebrow">Cloud sync</p>
+          <h2>Supabase account</h2>
+          <p id="authStatus">Local browser storage only.</p>
+        </div>
+        <div class="auth-panel__form">
+          <label>
+            Email
+            <input id="authEmailInput" type="email" autocomplete="email" />
+          </label>
+          <label>
+            Password
+            <input id="authPasswordInput" type="password" autocomplete="current-password" />
+          </label>
+          <button id="signInButton" type="button">Sign in</button>
+          <button id="signUpButton" class="ghost" type="button">Create account</button>
+          <button id="signOutButton" class="ghost" type="button" hidden>Sign out</button>
+        </div>
+      </section>
+
       <section class="summary-grid" aria-label="Offer summary">
         <article>
           <span>Best account</span>
@@ -78,7 +99,6 @@
               <th>Final week prices</th>
               <th>Next week</th>
               <th>Avg per meal</th>
-              <th>Priority</th>
               <th>Notes</th>
               <th></th>
             </tr>
@@ -128,7 +148,6 @@
         <td data-label="Final week prices"><div data-output="cycleFinals" class="cycle-grid cycle-finals"></div></td>
         <td data-label="Next week"><strong data-output="cheapestWeek"></strong></td>
         <td data-label="Avg per meal"><strong data-output="averageMealPrice"></strong></td>
-        <td data-label="Priority"><strong data-output="priorityScore"></strong></td>
         <td data-label="Notes"><input data-field="notes" type="text" placeholder="Notes" /></td>
         <td class="row-actions">
           <button data-action="toggle-subscription" class="icon-button" type="button"></button>
@@ -137,6 +156,7 @@
       </tr>
     </template>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
   </body>
 </html>
