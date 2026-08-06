@@ -2,10 +2,10 @@ const storageKey = "hellofresh-dashboard-state-v3";
 const legacyStorageKeys = ["hellofresh-dashboard-state-v2", "hellofresh-dashboard-state-v1"];
 const boxCount = 4;
 const supabaseConfig = {
-  url: "https://YOUR_PROJECT_REF.supabase.co",
-  anonKey: "YOUR_SUPABASE_ANON_KEY"
+  url: "https://ceypuldrwvrkdacgibjb.supabase.co",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNleXB1bGRyd3Zya2RhY2dpYmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTU0MTgsImV4cCI6MjEwMTU5MTQxOH0.AS55ouWsSPCXVMfE8BKVEziZfFOuAHksOz_StmSkKLI"
 };
-const hasSupabaseConfig = !supabaseConfig.url.includes("https://ceypuldrwvrkdacgibjb.supabase.co") && !supabaseConfig.anonKey.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNleXB1bGRyd3Zya2RhY2dpYmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTU0MTgsImV4cCI6MjEwMTU5MTQxOH0.AS55ouWsSPCXVMfE8BKVEziZfFOuAHksOz_StmSkKLI");
+const hasSupabaseConfig = !supabaseConfig.url.includes("YOUR_PROJECT_REF") && !supabaseConfig.anonKey.includes("YOUR_SUPABASE_ANON_KEY");
 const supabaseClient = hasSupabaseConfig && globalThis.supabase
   ? globalThis.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey)
   : null;
