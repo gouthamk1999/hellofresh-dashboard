@@ -105,7 +105,7 @@ function saveAndRender() {
 function render() {
   const accountEntries = state.accounts.map((account) => ({ account, metrics: calculateMetrics(account) }));
   const rankedAccounts = [...accountEntries]
-    .sort((left, right) => Number(right.metrics.isAvailable) - Number(left.metrics.isAvailable) || left.metrics.cheapestWeekPrice - right.metrics.cheapestWeekPrice);
+    .sort((left, right) => Number(right.metrics.isAvailable) - Number(left.metrics.isAvailable) || left.metrics.nextWeekPrice - right.metrics.nextWeekPrice || Number(right.account.freeDessert) - Number(left.account.freeDessert));
   const bestSubscribedId = rankedAccounts.find(({ metrics }) => metrics.isAvailable)?.account.id;
 
   rowsElement.replaceChildren();
@@ -121,7 +121,8 @@ function render() {
 
     row.querySelectorAll("[data-field]").forEach((field) => {
       const key = field.dataset.field;
-      field.value = key === "freeDessert" ? String(Boolean(account[key])) : account[key] ?? "";
+      field.value = ["freeDessert", "isNewAccount"].includes(key) ? String(Boolean(account[key])) : account[key] ?? "";
+      field.disabled = !account.isSubscribed;
       field.addEventListener("change", () => updateAccount(account.id, key, field.value));
     });
 
@@ -140,7 +141,7 @@ function render() {
     toggleButton.addEventListener("click", () => toggleSubscription(account.id));
 
     row.querySelector('[data-action="delete"]').addEventListener("click", () => deleteAccount(account.id));
-    row.querySelector('[data-output="cheapestWeek"]').textContent = withDessert(metrics.cheapestWeekLabel, account);
+    row.querySelector('[data-output="cheapestWeek"]').textContent = withDessert(metrics.nextWeekLabel, account);
     row.querySelector('[data-output="averageMealPrice"]').textContent = formatMoney(metrics.averageMealPrice);
     row.querySelector('[data-output="priorityScore"]').textContent = displayedPriority;
 
@@ -156,11 +157,17 @@ function render() {
 }
 
 function calculateMetrics(account) {
-  const grossCyclePrice = toNumber(account.boxPrice, 0) + toNumber(account.shipping, 0);
+  const boxPrice = toNumber(account.boxPrice, 0);
+  const shipping = toNumber(account.shipping, 0);
   let remainingCredit = toNumber(account.creditBalance, 0);
 
   const cycleFinalPrices = account.cycleDiscounts.map((discountValue, cycleIndex) => {
-    const discountedPrice = Math.max(0, grossCyclePrice - Math.max(0, toNumber(discountValue, 0)));
+    const discount = Math.max(0, toNumber(discountValue, 0));
+    const cycleShipping = account.isNewAccount && cycleIndex === 0 ? 0 : shipping;
+    const grossCyclePrice = boxPrice + cycleShipping;
+    const discountedPrice = account.discountMode === "percent"
+      ? Math.max(0, boxPrice - (boxPrice * (discount / 100))) + cycleShipping
+      : Math.max(0, grossCyclePrice - discount);
     if (account.completedCycles[cycleIndex]) {
       return discountedPrice;
     }
@@ -175,8 +182,9 @@ function calculateMetrics(account) {
   const remainingBoxCount = remainingPrices.length;
   const totalPrice = remainingPrices.reduce((total, price) => total + price, 0);
   const cheapestWeekPrice = remainingPrices.length > 0 ? Math.min(...remainingPrices) : Number.POSITIVE_INFINITY;
-  const cheapestWeekIndex = cycleFinalPrices.findIndex((price, cycleIndex) => !account.completedCycles[cycleIndex] && price === cheapestWeekPrice);
-  const averageMealPrice = Number.isFinite(cheapestWeekPrice) ? cheapestWeekPrice / Math.max(1, state.mealCount) : 0;
+  const nextWeekIndex = account.completedCycles.findIndex((isDone) => !isDone);
+  const nextWeekPrice = nextWeekIndex >= 0 ? cycleFinalPrices[nextWeekIndex] : Number.POSITIVE_INFINITY;
+  const averageMealPrice = Number.isFinite(nextWeekPrice) ? nextWeekPrice / Math.max(1, state.mealCount) : 0;
   const expiryDays = daysUntil(account.offerExpiry);
   const offerExpiring = expiryDays !== null && expiryDays <= state.expiryWindowDays;
   const hasConfiguredPrice = toNumber(account.boxPrice, 0) > 0 || toNumber(account.shipping, 0) > 0;
@@ -192,7 +200,8 @@ function calculateMetrics(account) {
     remainingBoxCount,
     totalPrice,
     cheapestWeekPrice,
-    cheapestWeekLabel: Number.isFinite(cheapestWeekPrice) ? `Week ${cheapestWeekIndex + 1}: ${formatMoney(cheapestWeekPrice)}` : "-",
+    nextWeekPrice,
+    nextWeekLabel: Number.isFinite(nextWeekPrice) ? `Week ${nextWeekIndex + 1}: ${formatMoney(nextWeekPrice)}` : "-",
     averageMealPrice,
     isAvailable,
     offerExpiring,
@@ -206,10 +215,10 @@ function renderSummary(rankedAccounts) {
   const worst = subscribedAccounts[subscribedAccounts.length - 1];
 
   document.querySelector("#bestAccount").textContent = best ? getAccountLabel(best.account) : "-";
-  document.querySelector("#lowestPrice").textContent = best ? withDessert(best.metrics.cheapestWeekLabel, best.account) : "-";
+  document.querySelector("#lowestPrice").textContent = best ? withDessert(best.metrics.nextWeekLabel, best.account) : "-";
   document.querySelector("#bestMealPrice").textContent = best ? formatMoney(best.metrics.averageMealPrice) : "-";
   document.querySelector("#savingAmount").textContent = best && worst
-    ? formatMoney(Math.max(0, worst.metrics.cheapestWeekPrice - best.metrics.cheapestWeekPrice))
+    ? formatMoney(Math.max(0, worst.metrics.nextWeekPrice - best.metrics.nextWeekPrice))
     : "-";
 }
 
@@ -222,7 +231,7 @@ function renderActions(rankedAccounts) {
   const actions = [];
 
   if (best) {
-    actions.push(`${getAccountLabel(best.account)} has the cheapest remaining week: ${withDessert(best.metrics.cheapestWeekLabel, best.account)}.`);
+    actions.push(`${getAccountLabel(best.account)} has the best next available week: ${withDessert(best.metrics.nextWeekLabel, best.account)}.`);
   }
 
   subscribedAccounts
@@ -255,6 +264,7 @@ function createWeekControl(account, discountValue, cycleIndex) {
   discountInput.type = "text";
   discountInput.inputMode = "decimal";
   discountInput.value = discountValue ?? 0;
+  discountInput.disabled = !account.isSubscribed;
   discountInput.setAttribute("aria-label", `Week ${cycleIndex + 1} discount`);
   discountInput.addEventListener("change", () => updateCycleDiscount(account.id, cycleIndex, discountInput.value));
 
@@ -262,6 +272,7 @@ function createWeekControl(account, discountValue, cycleIndex) {
   const doneInput = document.createElement("input");
   doneInput.type = "checkbox";
   doneInput.checked = account.completedCycles[cycleIndex];
+  doneInput.disabled = !account.isSubscribed;
   doneInput.addEventListener("change", () => updateCycleDone(account.id, cycleIndex, doneInput.checked));
   doneLabel.append(doneInput, " Done");
 
@@ -289,7 +300,7 @@ function updateAccount(id, key, value) {
   const account = state.accounts.find((item) => item.id === id);
   if (!account) return;
 
-  account[key] = key === "freeDessert"
+  account[key] = ["freeDessert", "isNewAccount"].includes(key)
     ? value === "true"
     : ["boxPrice", "shipping", "creditBalance"].includes(key)
       ? toNumber(value, 0)
@@ -309,7 +320,10 @@ function updateCycleDone(id, cycleIndex, isDone) {
   const account = state.accounts.find((item) => item.id === id);
   if (!account) return;
 
-  account.completedCycles[cycleIndex] = isDone;
+  account.completedCycles = account.completedCycles.map((wasDone, index) => {
+    if (isDone) return index <= cycleIndex || wasDone;
+    return index < cycleIndex ? wasDone : false;
+  });
   saveAndRender();
 }
 
@@ -334,7 +348,9 @@ function resetOfferValues(account) {
   account.shipping = 0;
   account.creditBalance = 0;
   account.freeDessert = false;
+  account.isNewAccount = false;
   account.offerExpiry = "";
+  account.discountMode = "euro";
   account.cycleDiscounts = [0, 0, 0, 0];
   account.completedCycles = [false, false, false, false];
   account.notes = "";
@@ -354,7 +370,7 @@ function resetData() {
   state.currency = "€";
   state.mealCount = 6;
   state.expiryWindowDays = 7;
-  state.accounts = sampleAccounts.map((account) => createAccount({ ...account, id: crypto.randomUUID(), cycleDiscounts: [...account.cycleDiscounts], completedCycles: [...account.completedCycles] }));
+  state.accounts = sampleAccounts.map((account) => createAccount({ ...account, id: createId(), cycleDiscounts: [...account.cycleDiscounts], completedCycles: [...account.completedCycles] }));
   currencyInput.value = state.currency;
   mealCountInput.value = state.mealCount;
   expiryWindowInput.value = state.expiryWindowDays;
@@ -404,6 +420,7 @@ function createAccount(overrides = {}) {
     shipping: 0,
     creditBalance: 0,
     freeDessert: false,
+    isNewAccount: false,
     offerExpiry: "",
     cycleDiscounts: [0, 0, 0, 0],
     completedCycles: [false, false, false, false],
@@ -416,7 +433,7 @@ function createAccount(overrides = {}) {
 
 function normalizeAccount(account, index) {
   const boxPrice = toNumber(account.boxPrice, 0);
-  const savedEuroDiscounts = account.discountMode === "euro" && Array.isArray(account.cycleDiscounts)
+  const savedDiscounts = ["euro", "percent"].includes(account.discountMode) && Array.isArray(account.cycleDiscounts)
     ? account.cycleDiscounts.slice(0, boxCount).map((value) => toNumber(value, 0))
     : null;
   const oldPercentageDiscounts = Array.isArray(account.cycleDiscounts)
@@ -424,8 +441,8 @@ function normalizeAccount(account, index) {
     : [boxPrice * (toNumber(account.discountValue, 0) / 100), 0, 0, 0];
   const cycleDiscounts = Array.isArray(account.discountAmounts)
     ? account.discountAmounts.slice(0, boxCount).map((value) => toNumber(value, 0))
-    : savedEuroDiscounts
-      ? savedEuroDiscounts
+    : savedDiscounts
+      ? savedDiscounts
     : oldPercentageDiscounts;
 
   while (cycleDiscounts.length < boxCount) cycleDiscounts.push(0);
@@ -438,11 +455,13 @@ function normalizeAccount(account, index) {
 
   return createAccount({
     id: account.id || createId(),
+    discountMode: account.discountMode === "percent" ? "percent" : "euro",
     name: account.name || String.fromCharCode(65 + index),
     boxPrice,
     shipping: toNumber(account.shipping, 0),
     creditBalance: toNumber(account.creditBalance ?? account.walletCredit, 0),
     freeDessert: Boolean(account.freeDessert),
+    isNewAccount: Boolean(account.isNewAccount),
     offerExpiry: account.offerExpiry || account.promoExpiry || "",
     cycleDiscounts,
     completedCycles,
