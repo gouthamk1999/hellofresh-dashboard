@@ -22,31 +22,20 @@
           <input id="importInput" type="file" accept="application/json" />
         </label>
         <button id="resetButton" class="ghost" type="button">Reset sample data</button>
+        <section class="auth-panel" aria-label="Cloud account">
+          <p id="authStatus">Local browser storage only.</p>
+          <span id="cloudStatus" class="cloud-status">Local only</span>
+          <div class="auth-panel__form">
+            <input id="authEmailInput" type="email" autocomplete="email" placeholder="Email" aria-label="Email" />
+            <input id="authPasswordInput" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password" />
+            <button id="signInButton" type="button">Sign in</button>
+            <button id="signOutButton" class="ghost" type="button" hidden>Sign out</button>
+          </div>
+        </section>
       </div>
     </header>
 
     <main>
-      <section class="auth-panel" aria-label="Cloud account">
-        <div>
-          <p class="eyebrow">Cloud sync</p>
-          <h2>Supabase account</h2>
-          <p id="authStatus">Local browser storage only.</p>
-        </div>
-        <div class="auth-panel__form">
-          <label>
-            Email
-            <input id="authEmailInput" type="email" autocomplete="email" />
-          </label>
-          <label>
-            Password
-            <input id="authPasswordInput" type="password" autocomplete="current-password" />
-          </label>
-          <button id="signInButton" type="button">Sign in</button>
-          <button id="signUpButton" class="ghost" type="button">Create account</button>
-          <button id="signOutButton" class="ghost" type="button" hidden>Sign out</button>
-        </div>
-      </section>
-
       <section class="summary-grid" aria-label="Offer summary">
         <article>
           <span>Best account</span>
@@ -64,6 +53,14 @@
           <span>Next week saving</span>
           <strong id="savingAmount">-</strong>
         </article>
+        <article>
+          <span>Baseline saving</span>
+          <strong id="baselineSaving">-</strong>
+        </article>
+        <article>
+          <span>Cycle saving</span>
+          <strong id="cycleSaving">-</strong>
+        </article>
       </section>
 
       <section class="controls" aria-label="Global settings">
@@ -79,6 +76,10 @@
           Expiring soon window
           <input id="expiryWindowInput" type="number" min="1" step="1" value="7" />
         </label>
+        <label>
+          Baseline box price
+          <input id="baselineBoxPriceInput" type="text" inputmode="decimal" value="0" />
+        </label>
         <button id="addAccountButton" type="button">Add account</button>
       </section>
 
@@ -88,8 +89,8 @@
             <tr>
               <th>Account</th>
               <th>Status</th>
-              <th>Week price</th>
-              <th>Shipping</th>
+              <th>Box Price</th>
+              <th>Delivery Fee</th>
               <th>New account</th>
               <th>Discount type</th>
               <th>Credit balance</th>
@@ -122,30 +123,28 @@
           <input data-field="name" type="text" placeholder="Account A" />
         </td>
         <td data-label="Status"><span data-output="status" class="status-pill"></span></td>
-        <td data-label="Week price"><input data-field="boxPrice" type="text" inputmode="decimal" /></td>
-        <td data-label="Shipping"><input data-field="shipping" type="text" inputmode="decimal" /></td>
-        <td data-label="New account">
-          <select data-field="isNewAccount">
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+        <td data-label="Box Price" data-active-field><input data-field="boxPrice" type="text" inputmode="decimal" /></td>
+        <td data-label="Delivery Fee" data-active-field><input data-field="shipping" type="text" inputmode="decimal" /></td>
+        <td data-label="New account" data-active-field>
+          <label class="check-control">
+            <input data-field="isNewAccount" type="checkbox" aria-label="New account" />
+          </label>
         </td>
-        <td data-label="Discount type">
+        <td data-label="Discount type" data-active-field>
           <select data-field="discountMode">
             <option value="euro">Euro</option>
             <option value="percent">%</option>
           </select>
         </td>
-        <td data-label="Credit balance"><input data-field="creditBalance" type="text" inputmode="decimal" /></td>
-        <td data-label="Free dessert">
-          <select data-field="freeDessert">
-            <option value="false">No</option>
-            <option value="true">Yes</option>
-          </select>
+        <td data-label="Credit balance" data-active-field><input data-field="creditBalance" type="text" inputmode="decimal" /></td>
+        <td data-label="Free dessert" data-active-field>
+          <label class="check-control">
+            <input data-field="freeDessert" type="checkbox" aria-label="Free dessert" />
+          </label>
         </td>
-        <td data-label="Offer expiry"><input data-field="offerExpiry" type="date" /></td>
-        <td data-label="Weeks"><div class="cycle-grid cycle-controls"></div></td>
-        <td data-label="Final week prices"><div data-output="cycleFinals" class="cycle-grid cycle-finals"></div></td>
+        <td data-label="Offer expiry" data-active-field><input data-field="offerExpiry" type="date" /></td>
+        <td data-label="Weeks" data-active-field><div class="cycle-grid cycle-controls"></div></td>
+        <td data-label="Final week prices" data-active-field><div data-output="cycleFinals" class="cycle-grid cycle-finals"></div></td>
         <td data-label="Next week"><strong data-output="cheapestWeek"></strong></td>
         <td data-label="Avg per meal"><strong data-output="averageMealPrice"></strong></td>
         <td data-label="Notes"><input data-field="notes" type="text" placeholder="Notes" /></td>
