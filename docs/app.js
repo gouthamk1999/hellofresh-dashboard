@@ -1,6 +1,18 @@
 const storageKey = "hellofresh-dashboard-state-v3";
 const legacyStorageKeys = ["hellofresh-dashboard-state-v2", "hellofresh-dashboard-state-v1"];
 const boxCount = 4;
+const supabaseConfig = {
+  url: "https://YOUR_PROJECT_REF.supabase.co",
+  anonKey: "YOUR_SUPABASE_ANON_KEY"
+};
+const hasSupabaseConfig = !supabaseConfig.url.includes("https://ceypuldrwvrkdacgibjb.supabase.co") && !supabaseConfig.anonKey.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNleXB1bGRyd3Zya2RhY2dpYmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTU0MTgsImV4cCI6MjEwMTU5MTQxOH0.AS55ouWsSPCXVMfE8BKVEziZfFOuAHksOz_StmSkKLI");
+const supabaseClient = hasSupabaseConfig && globalThis.supabase
+  ? globalThis.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey)
+  : null;
+
+let currentUser = null;
+let cloudSaveTimer = null;
+let isApplyingCloudState = false;
 
 const sampleAccounts = [
   createAccount({
@@ -51,6 +63,12 @@ const rowTemplate = document.querySelector("#accountRowTemplate");
 const currencyInput = document.querySelector("#currencyInput");
 const mealCountInput = document.querySelector("#mealCountInput");
 const expiryWindowInput = document.querySelector("#expiryWindowInput");
+const authStatus = document.querySelector("#authStatus");
+const authEmailInput = document.querySelector("#authEmailInput");
+const authPasswordInput = document.querySelector("#authPasswordInput");
+const signInButton = document.querySelector("#signInButton");
+const signUpButton = document.querySelector("#signUpButton");
+const signOutButton = document.querySelector("#signOutButton");
 
 currencyInput.value = state.currency;
 mealCountInput.value = state.mealCount;
@@ -60,6 +78,9 @@ document.querySelector("#addAccountButton").addEventListener("click", addAccount
 document.querySelector("#resetButton").addEventListener("click", resetData);
 document.querySelector("#exportButton").addEventListener("click", exportData);
 document.querySelector("#importInput").addEventListener("change", importData);
+signInButton.addEventListener("click", signIn);
+signUpButton.addEventListener("click", signUp);
+signOutButton.addEventListener("click", signOut);
 
 [currencyInput, mealCountInput, expiryWindowInput].forEach((input) => {
   input.addEventListener("input", () => {
@@ -71,6 +92,7 @@ document.querySelector("#importInput").addEventListener("change", importData);
 });
 
 render();
+initAuth();
 
 function loadState() {
   const savedState = localStorage.getItem(storageKey) || legacyStorageKeys.map((key) => localStorage.getItem(key)).find(Boolean);
@@ -100,6 +122,138 @@ function createState(accounts, overrides = {}) {
 function saveAndRender() {
   localStorage.setItem(storageKey, JSON.stringify(state));
   render();
+  queueCloudSave();
+}
+
+async function initAuth() {
+  if (!supabaseClient) {
+    setAuthStatus("Add your Supabase URL and anon key in app.js to enable cloud sync.");
+    return;
+  }
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    setAuthStatus(error.message);
+    return;
+  }
+
+  currentUser = data.session?.user || null;
+  renderAuthState();
+  if (currentUser) await loadCloudState();
+
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    currentUser = session?.user || null;
+    renderAuthState();
+    if (currentUser) await loadCloudState();
+  });
+}
+
+async function signUp() {
+  const credentials = getAuthCredentials();
+  if (!credentials) return;
+
+  const { error } = await supabaseClient.auth.signUp(credentials);
+  setAuthStatus(error ? error.message : "Account created. Check your email if confirmation is enabled.");
+}
+
+async function signIn() {
+  const credentials = getAuthCredentials();
+  if (!credentials) return;
+
+  const { error } = await supabaseClient.auth.signInWithPassword(credentials);
+  setAuthStatus(error ? error.message : "Signed in. Loading saved dashboard...");
+}
+
+async function signOut() {
+  if (!supabaseClient) return;
+
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) setAuthStatus(error.message);
+}
+
+function getAuthCredentials() {
+  if (!supabaseClient) {
+    setAuthStatus("Supabase is not configured yet.");
+    return null;
+  }
+
+  const email = authEmailInput.value.trim();
+  const password = authPasswordInput.value;
+  if (!email || !password) {
+    setAuthStatus("Enter an email and password.");
+    return null;
+  }
+
+  return { email, password };
+}
+
+function renderAuthState() {
+  const isSignedIn = Boolean(currentUser);
+  authEmailInput.disabled = isSignedIn;
+  authPasswordInput.disabled = isSignedIn;
+  signInButton.hidden = isSignedIn;
+  signUpButton.hidden = isSignedIn;
+  signOutButton.hidden = !isSignedIn;
+  setAuthStatus(isSignedIn ? `Signed in as ${currentUser.email}. Cloud sync is on.` : "Signed out. Changes are saved in this browser only.");
+}
+
+function setAuthStatus(message) {
+  authStatus.textContent = message;
+}
+
+function queueCloudSave() {
+  if (!supabaseClient || !currentUser || isApplyingCloudState) return;
+
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(saveCloudState, 600);
+}
+
+async function saveCloudState() {
+  if (!supabaseClient || !currentUser) return;
+
+  const { error } = await supabaseClient
+    .from("dashboards")
+    .upsert({ user_id: currentUser.id, state, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+
+  setAuthStatus(error ? error.message : `Signed in as ${currentUser.email}. Saved to Supabase.`);
+}
+
+async function loadCloudState() {
+  if (!supabaseClient || !currentUser) return;
+
+  const { data, error } = await supabaseClient
+    .from("dashboards")
+    .select("state")
+    .eq("user_id", currentUser.id)
+    .maybeSingle();
+
+  if (error) {
+    setAuthStatus(error.message);
+    return;
+  }
+
+  if (!data?.state) {
+    await saveCloudState();
+    return;
+  }
+
+  isApplyingCloudState = true;
+  applyState(data.state);
+  localStorage.setItem(storageKey, JSON.stringify(state));
+  render();
+  isApplyingCloudState = false;
+  setAuthStatus(`Signed in as ${currentUser.email}. Loaded from Supabase.`);
+}
+
+function applyState(nextState) {
+  const normalizedState = createState(Array.isArray(nextState.accounts) ? nextState.accounts.map(normalizeAccount) : sampleAccounts, nextState);
+  state.currency = normalizedState.currency;
+  state.mealCount = normalizedState.mealCount;
+  state.expiryWindowDays = normalizedState.expiryWindowDays;
+  state.accounts = normalizedState.accounts;
+  currencyInput.value = state.currency;
+  mealCountInput.value = state.mealCount;
+  expiryWindowInput.value = state.expiryWindowDays;
 }
 
 function render() {
@@ -113,7 +267,6 @@ function render() {
   accountEntries.forEach(({ account, metrics }) => {
     const row = rowTemplate.content.firstElementChild.cloneNode(true);
     const isBestSubscribed = account.isSubscribed && account.id === bestSubscribedId;
-    const displayedPriority = account.isSubscribed ? metrics.priorityScore + (isBestSubscribed ? 10 : 0) : "-";
 
     row.dataset.id = account.id;
     row.classList.toggle("is-winner", isBestSubscribed);
@@ -143,7 +296,6 @@ function render() {
     row.querySelector('[data-action="delete"]').addEventListener("click", () => deleteAccount(account.id));
     row.querySelector('[data-output="cheapestWeek"]').textContent = withDessert(metrics.nextWeekLabel, account);
     row.querySelector('[data-output="averageMealPrice"]').textContent = formatMoney(metrics.averageMealPrice);
-    row.querySelector('[data-output="priorityScore"]').textContent = displayedPriority;
 
     const statusElement = row.querySelector('[data-output="status"]');
     statusElement.textContent = getStatusLabel(account, metrics, isBestSubscribed);
