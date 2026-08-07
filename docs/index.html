@@ -117,12 +117,30 @@
       </section>
     </main>
 
+    <div id="notificationRegion" class="notification-region" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog id="unsubscribeDialog" class="unsubscribe-dialog" aria-labelledby="unsubscribeDialogTitle">
+      <form id="unsubscribeForm" method="dialog">
+        <h2 id="unsubscribeDialogTitle">When did you unsubscribe?</h2>
+        <p id="unsubscribeDialogAccount"></p>
+        <label for="unsubscribeDateInput">Unsubscribe date</label>
+        <input id="unsubscribeDateInput" type="date" required />
+        <div class="dialog-actions">
+          <button id="cancelUnsubscribeButton" class="ghost" type="button">Cancel</button>
+          <button type="submit">Save date</button>
+        </div>
+      </form>
+    </dialog>
+
     <template id="accountRowTemplate">
       <tr>
         <td data-label="Account">
           <input data-field="name" type="text" placeholder="Account A" />
         </td>
-        <td data-label="Status"><span data-output="status" class="status-pill"></span></td>
+        <td data-label="Status">
+          <span data-output="status" class="status-pill"></span>
+          <span data-output="resubscribeCountdown" class="countdown"></span>
+        </td>
         <td data-label="Box Price" data-active-field><input data-field="boxPrice" type="text" inputmode="decimal" /></td>
         <td data-label="Delivery Fee" data-active-field><input data-field="shipping" type="text" inputmode="decimal" /></td>
         <td data-label="New account" data-active-field>

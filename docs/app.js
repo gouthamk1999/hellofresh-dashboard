@@ -1,6 +1,7 @@
 const storageKey = "hellofresh-dashboard-state-v3";
 const legacyStorageKeys = ["hellofresh-dashboard-state-v2", "hellofresh-dashboard-state-v1"];
 const boxCount = 4;
+const resubscriptionWaitDays = 28;
 const supabaseConfig = {
   url: "https://ceypuldrwvrkdacgibjb.supabase.co",
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNleXB1bGRyd3Zya2RhY2dpYmpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTU0MTgsImV4cCI6MjEwMTU5MTQxOH0.AS55ouWsSPCXVMfE8BKVEziZfFOuAHksOz_StmSkKLI"
@@ -13,6 +14,8 @@ const supabaseClient = hasSupabaseConfig && globalThis.supabase
 let currentUser = null;
 let cloudSaveTimer = null;
 let isApplyingCloudState = false;
+let pendingUnsubscribeAccountId = null;
+let lastReadyNotificationKey = "";
 
 const sampleAccounts = [
   createAccount({
@@ -70,6 +73,11 @@ const authEmailInput = document.querySelector("#authEmailInput");
 const authPasswordInput = document.querySelector("#authPasswordInput");
 const signInButton = document.querySelector("#signInButton");
 const signOutButton = document.querySelector("#signOutButton");
+const unsubscribeDialog = document.querySelector("#unsubscribeDialog");
+const unsubscribeForm = document.querySelector("#unsubscribeForm");
+const unsubscribeDateInput = document.querySelector("#unsubscribeDateInput");
+const unsubscribeDialogAccount = document.querySelector("#unsubscribeDialogAccount");
+const cancelUnsubscribeButton = document.querySelector("#cancelUnsubscribeButton");
 
 currencyInput.value = state.currency;
 mealCountInput.value = state.mealCount;
@@ -82,6 +90,8 @@ document.querySelector("#exportButton").addEventListener("click", exportData);
 document.querySelector("#importInput").addEventListener("change", importData);
 signInButton.addEventListener("click", signIn);
 signOutButton.addEventListener("click", signOut);
+unsubscribeForm.addEventListener("submit", saveUnsubscribeDate);
+cancelUnsubscribeButton.addEventListener("click", () => unsubscribeDialog.close());
 
 [currencyInput, mealCountInput, expiryWindowInput, baselineBoxPriceInput].forEach((input) => {
   input.addEventListener("input", () => {
@@ -95,6 +105,7 @@ signOutButton.addEventListener("click", signOut);
 
 render();
 initAuth();
+setInterval(render, 60 * 1000);
 
 function loadState() {
   const savedState = localStorage.getItem(storageKey) || legacyStorageKeys.map((key) => localStorage.getItem(key)).find(Boolean);
@@ -285,6 +296,7 @@ function render() {
     row.dataset.id = account.id;
     row.classList.toggle("is-winner", isBestSubscribed);
     row.classList.toggle("is-unsubscribed", !account.isSubscribed);
+    row.classList.toggle("is-ready", isReadyForResubscription(account));
     row.classList.toggle("is-inactive", !account.isSubscribed || metrics.remainingBoxCount === 0);
 
     row.querySelectorAll("[data-field]").forEach((field) => {
@@ -319,12 +331,14 @@ function render() {
     const statusElement = row.querySelector('[data-output="status"]');
     statusElement.textContent = getStatusLabel(account, metrics, isBestSubscribed);
     statusElement.className = `status-pill ${getStatusClass(account, metrics, isBestSubscribed)}`;
+    row.querySelector('[data-output="resubscribeCountdown"]').textContent = getResubscribeCountdown(account);
 
     rowsElement.append(row);
   });
 
   renderSummary(rankedAccounts);
   renderActions(rankedAccounts);
+  notifyReadyAccounts();
 }
 
 function calculateMetrics(account) {
@@ -422,7 +436,7 @@ function renderActions(rankedAccounts) {
     .forEach(({ account }) => actions.push(`${getAccountLabel(account)} offer expires soon.`));
 
   unsubscribedAccounts.forEach(({ account }) => {
-    actions.push(`${getAccountLabel(account)} is unsubscribed. Resubscribe when you want to start a fresh 4-week offer.`);
+    actions.push(`${getAccountLabel(account)} is unsubscribed. ${getResubscribeCountdown(account) || "Choose a date to start the 4-week wait."}`);
   });
 
   completedAccounts.forEach(({ account }) => {
@@ -464,6 +478,7 @@ function createWeekControl(account, discountValue, cycleIndex) {
 }
 
 function getStatusLabel(account, metrics, isBestSubscribed) {
+  if (!account.isSubscribed && isReadyForResubscription(account)) return "Ready to resubscribe";
   if (!account.isSubscribed) return "Unsubscribed";
   if (metrics.remainingBoxCount === 0) return "Cycle done";
   if (isBestSubscribed) return "Best total";
@@ -472,6 +487,7 @@ function getStatusLabel(account, metrics, isBestSubscribed) {
 }
 
 function getStatusClass(account, metrics, isBestSubscribed) {
+  if (!account.isSubscribed && isReadyForResubscription(account)) return "status-ready";
   if (!account.isSubscribed) return "status-unsubscribed";
   if (metrics.remainingBoxCount === 0) return "status-unsubscribed";
   if (isBestSubscribed) return "status-order";
@@ -515,15 +531,68 @@ function toggleSubscription(id) {
   if (!account) return;
 
   if (account.isSubscribed) {
-    account.isSubscribed = false;
-    account.unsubscribedAt = todayIsoDate();
+    pendingUnsubscribeAccountId = id;
+    unsubscribeDialogAccount.textContent = `${getAccountLabel(account)} will be ready for resubscription four weeks after this date.`;
+    unsubscribeDateInput.value = todayIsoDate();
+    if (typeof unsubscribeDialog.showModal === "function") {
+      unsubscribeDialog.showModal();
+    } else if (confirm(`Save today as the unsubscribe date for ${getAccountLabel(account)}?`)) {
+      saveUnsubscribeDate();
+    }
+    return;
   } else {
     resetOfferValues(account);
     account.isSubscribed = true;
     account.unsubscribedAt = "";
   }
-
   saveAndRender();
+}
+
+function saveUnsubscribeDate(event) {
+  event?.preventDefault();
+  const account = state.accounts.find((item) => item.id === pendingUnsubscribeAccountId);
+  if (!account || !unsubscribeDateInput.value) return;
+
+  account.isSubscribed = false;
+  account.unsubscribedAt = unsubscribeDateInput.value;
+  pendingUnsubscribeAccountId = null;
+  unsubscribeDialog.close();
+  saveAndRender();
+}
+
+function getResubscriptionDate(account) {
+  return account.unsubscribedAt ? addDaysIsoDate(account.unsubscribedAt, resubscriptionWaitDays) : "";
+}
+
+function isReadyForResubscription(account) {
+  const targetDate = getResubscriptionDate(account);
+  return !account.isSubscribed && Boolean(targetDate) && daysUntil(targetDate) <= 0;
+}
+
+function getResubscribeCountdown(account) {
+    if (account.isSubscribed) return "";
+    const targetDate = getResubscriptionDate(account);
+    if (!targetDate) return "Set an unsubscribe date";
+    const daysRemaining = daysUntil(targetDate);
+    return daysRemaining <= 0 ? "Ready now" : `Resubscribe in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`;
+  }
+
+function notifyReadyAccounts() {
+    const readyAccounts = state.accounts.filter(isReadyForResubscription);
+    const notificationRegion = document.querySelector("#notificationRegion");
+    if (!readyAccounts.length) {
+      notificationRegion.replaceChildren();
+      lastReadyNotificationKey = "";
+      return;
+    }
+
+    const notificationKey = readyAccounts.map((account) => account.id).sort().join(",");
+    if (notificationKey === lastReadyNotificationKey) return;
+    lastReadyNotificationKey = notificationKey;
+    const message = document.createElement("div");
+    message.className = "ready-notification";
+    message.textContent = `${readyAccounts.map(getAccountLabel).join(", ")} ${readyAccounts.length === 1 ? "is" : "are"} ready to resubscribe.`;
+    notificationRegion.replaceChildren(message);
 }
 
 function resetOfferValues(account) {
@@ -656,6 +725,13 @@ function normalizeAccount(account, index) {
     unsubscribedAt: account.unsubscribedAt || "",
     notes: account.notes || ""
   });
+}
+
+function addDaysIsoDate(dateValue, days) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function daysUntil(dateValue) {
