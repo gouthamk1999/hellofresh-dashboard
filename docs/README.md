@@ -14,6 +14,8 @@ A static dashboard for comparing weekly HelloFresh account costs. It runs entire
 - Calculated final price for each of the 4 weeks
 - Next available week, average price per meal, best account, baseline savings, cycle savings, and account status
 - Subscribe/unsubscribe account status. Resubscribing resets the account offer values for a new 4-week cycle
+- Smart recommendation banner that explains the best next action or account to use
+- Manual account ordering with drag-and-drop row handles
 - Optional Supabase account sign-in for permanent cloud storage
 
 Delivery fee is added to each week before discounts and credit are applied. When New account is checked, the delivery fee is ignored for week 1 only.
@@ -24,7 +26,7 @@ Credit balance is applied to the first available week. If credit remains, it is 
 
 When Free Dessert is checked, the cheapest-week display shows a dessert marker.
 
-Data is saved in your browser with `localStorage`. When you sign in with Supabase, the same dashboard state is also saved to your account for permanent storage. Use **Export JSON** to keep a manual backup or move the data without signing in.
+Data is saved in your browser with `localStorage`. When you sign in with Supabase, the same dashboard state is also saved to your account for permanent storage. If another device changes the cloud dashboard while this browser has local edits, the dashboard asks whether to keep the local version or load the cloud version instead of silently overwriting either copy. Use **Export JSON** to keep a manual backup or move the data without signing in.
 
 Use **Baseline box price** to compare the best available account against a normal full-price box. The dashboard shows the saving for the next box and the remaining 4-week cycle. The cloud status indicator shows whether Supabase sync is local-only, saving, saved, or failed.
 

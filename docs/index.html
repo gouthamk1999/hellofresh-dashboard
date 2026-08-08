@@ -36,6 +36,8 @@
     </header>
 
     <main>
+      <section id="recommendationBanner" class="recommendation-banner" aria-live="polite"></section>
+
       <section class="summary-grid" aria-label="Offer summary">
         <article>
           <span>Best account</span>
@@ -87,6 +89,7 @@
         <table>
           <thead>
             <tr>
+              <th>Order</th>
               <th>Account</th>
               <th>Status</th>
               <th>Box Price</th>
@@ -132,8 +135,28 @@
       </form>
     </dialog>
 
+    <dialog id="cloudConflictDialog" class="conflict-dialog" aria-labelledby="cloudConflictTitle">
+      <form method="dialog">
+        <h2 id="cloudConflictTitle">Cloud changes found</h2>
+        <p>A different device changed your cloud dashboard while this browser also has local changes. Choose which version to keep.</p>
+        <div class="conflict-choices">
+          <button id="useLocalStateButton" type="button">
+            Keep local
+            <span>Save this browser's dashboard to the cloud.</span>
+          </button>
+          <button id="useCloudStateButton" class="ghost" type="button">
+            Use cloud
+            <span>Replace this browser with the cloud version.</span>
+          </button>
+        </div>
+      </form>
+    </dialog>
+
     <template id="accountRowTemplate">
       <tr>
+        <td data-label="Order">
+          <button data-action="drag" class="drag-handle" type="button" draggable="true" aria-label="Drag account to reorder">↕</button>
+        </td>
         <td data-label="Account">
           <input data-field="name" type="text" placeholder="Account A" />
         </td>

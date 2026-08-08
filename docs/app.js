@@ -1,4 +1,5 @@
 const storageKey = "hellofresh-dashboard-state-v3";
+const cloudMetaKey = "hellofresh-dashboard-cloud-meta-v1";
 const legacyStorageKeys = ["hellofresh-dashboard-state-v2", "hellofresh-dashboard-state-v1"];
 const boxCount = 4;
 const resubscriptionWaitDays = 28;
@@ -16,6 +17,8 @@ let cloudSaveTimer = null;
 let isApplyingCloudState = false;
 let pendingUnsubscribeAccountId = null;
 let lastReadyNotificationKey = "";
+let pendingCloudConflict = null;
+let draggedAccountId = "";
 
 const sampleAccounts = [
   createAccount({
@@ -73,11 +76,15 @@ const authEmailInput = document.querySelector("#authEmailInput");
 const authPasswordInput = document.querySelector("#authPasswordInput");
 const signInButton = document.querySelector("#signInButton");
 const signOutButton = document.querySelector("#signOutButton");
+const recommendationBanner = document.querySelector("#recommendationBanner");
 const unsubscribeDialog = document.querySelector("#unsubscribeDialog");
 const unsubscribeForm = document.querySelector("#unsubscribeForm");
 const unsubscribeDateInput = document.querySelector("#unsubscribeDateInput");
 const unsubscribeDialogAccount = document.querySelector("#unsubscribeDialogAccount");
 const cancelUnsubscribeButton = document.querySelector("#cancelUnsubscribeButton");
+const cloudConflictDialog = document.querySelector("#cloudConflictDialog");
+const useLocalStateButton = document.querySelector("#useLocalStateButton");
+const useCloudStateButton = document.querySelector("#useCloudStateButton");
 
 currencyInput.value = state.currency;
 mealCountInput.value = state.mealCount;
@@ -92,6 +99,8 @@ signInButton.addEventListener("click", signIn);
 signOutButton.addEventListener("click", signOut);
 unsubscribeForm.addEventListener("submit", saveUnsubscribeDate);
 cancelUnsubscribeButton.addEventListener("click", () => unsubscribeDialog.close());
+useLocalStateButton.addEventListener("click", keepLocalCloudConflict);
+useCloudStateButton.addEventListener("click", useCloudConflictState);
 
 [currencyInput, mealCountInput, expiryWindowInput, baselineBoxPriceInput].forEach((input) => {
   input.addEventListener("input", () => {
@@ -129,11 +138,13 @@ function createState(accounts, overrides = {}) {
     mealCount: toNumber(overrides.mealCount, 6),
     expiryWindowDays: toNumber(overrides.expiryWindowDays, 7),
     baselineBoxPrice: toNumber(overrides.baselineBoxPrice, 0),
+    updatedAt: overrides.updatedAt || new Date().toISOString(),
     accounts
   };
 }
 
 function saveAndRender() {
+  state.updatedAt = new Date().toISOString();
   localStorage.setItem(storageKey, JSON.stringify(state));
   render();
   queueCloudSave();
@@ -221,22 +232,52 @@ function setCloudStatus(message, status = "idle") {
 }
 
 function queueCloudSave() {
-  if (!supabaseClient || !currentUser || isApplyingCloudState) return;
+  if (!supabaseClient || !currentUser || isApplyingCloudState || pendingCloudConflict) return;
 
   clearTimeout(cloudSaveTimer);
   setCloudStatus("Saving...", "saving");
   cloudSaveTimer = setTimeout(saveCloudState, 600);
 }
 
-async function saveCloudState() {
+async function saveCloudState(force = false) {
   if (!supabaseClient || !currentUser) return;
+  if (!force && await detectCloudConflictBeforeSave()) return;
 
+  const updatedAt = new Date().toISOString();
   const { error } = await supabaseClient
     .from("dashboards")
-    .upsert({ user_id: currentUser.id, state, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    .upsert({ user_id: currentUser.id, state, updated_at: updatedAt }, { onConflict: "user_id" });
 
   setAuthStatus(error ? error.message : currentUser.email);
   setCloudStatus(error ? "Save failed" : "Saved", error ? "error" : "saved");
+  if (!error) rememberCloudSync(updatedAt, state);
+}
+
+async function detectCloudConflictBeforeSave() {
+  const syncedMeta = getCurrentCloudMeta();
+  if (!syncedMeta) return false;
+
+  const { data, error } = await supabaseClient
+    .from("dashboards")
+    .select("state, updated_at")
+    .eq("user_id", currentUser.id)
+    .maybeSingle();
+
+  if (error) {
+    setAuthStatus(error.message);
+    setCloudStatus("Conflict check failed", "error");
+    return true;
+  }
+
+  if (!data?.state) return false;
+
+  const normalizedCloudState = createState(Array.isArray(data.state.accounts) ? data.state.accounts.map(normalizeAccount) : sampleAccounts, data.state);
+  const cloudUpdatedAt = data.updated_at || "";
+  if (!hasCloudConflict(normalizedCloudState, cloudUpdatedAt)) return false;
+
+  pendingCloudConflict = { state: normalizedCloudState, updatedAt: cloudUpdatedAt };
+  showCloudConflictDialog();
+  return true;
 }
 
 async function loadCloudState() {
@@ -244,7 +285,7 @@ async function loadCloudState() {
 
   const { data, error } = await supabaseClient
     .from("dashboards")
-    .select("state")
+    .select("state, updated_at")
     .eq("user_id", currentUser.id)
     .maybeSingle();
 
@@ -259,13 +300,111 @@ async function loadCloudState() {
     return;
   }
 
+  const normalizedCloudState = createState(Array.isArray(data.state.accounts) ? data.state.accounts.map(normalizeAccount) : sampleAccounts, data.state);
+  const cloudUpdatedAt = data.updated_at || "";
+  if (hasCloudConflict(normalizedCloudState, cloudUpdatedAt)) {
+    pendingCloudConflict = { state: normalizedCloudState, updatedAt: cloudUpdatedAt };
+    showCloudConflictDialog();
+    return;
+  }
+
   isApplyingCloudState = true;
-  applyState(data.state);
+  applyState(normalizedCloudState);
   localStorage.setItem(storageKey, JSON.stringify(state));
   render();
   isApplyingCloudState = false;
+  rememberCloudSync(cloudUpdatedAt, state);
   setAuthStatus(currentUser.email);
   setCloudStatus("Saved", "saved");
+}
+
+function getCloudMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(cloudMetaKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function getCurrentCloudMeta() {
+  return currentUser ? getCloudMeta()[currentUser.id] : null;
+}
+
+function rememberCloudSync(updatedAt, syncedState) {
+  if (!currentUser || !updatedAt) return;
+  const meta = getCloudMeta();
+  meta[currentUser.id] = {
+    updatedAt,
+    stateSignature: stateSignature(syncedState)
+  };
+  localStorage.setItem(cloudMetaKey, JSON.stringify(meta));
+}
+
+function hasCloudConflict(cloudState, cloudUpdatedAt) {
+  const localSignature = stateSignature(state);
+  const cloudSignature = stateSignature(cloudState);
+  if (localSignature === cloudSignature) return false;
+
+  const syncedMeta = getCurrentCloudMeta();
+  if (!syncedMeta) return Boolean(localStorage.getItem(storageKey));
+
+  const localChanged = localSignature !== syncedMeta.stateSignature;
+  const cloudChanged = cloudUpdatedAt !== syncedMeta.updatedAt || cloudSignature !== syncedMeta.stateSignature;
+  return localChanged && cloudChanged;
+}
+
+async function keepLocalCloudConflict() {
+  if (!pendingCloudConflict) return;
+
+  pendingCloudConflict = null;
+  closeDialog(cloudConflictDialog);
+  setCloudStatus("Saving local...", "saving");
+  await saveCloudState(true);
+}
+
+function useCloudConflictState() {
+  if (!pendingCloudConflict) return;
+
+  const cloudState = pendingCloudConflict.state;
+  const cloudUpdatedAt = pendingCloudConflict.updatedAt;
+  pendingCloudConflict = null;
+  isApplyingCloudState = true;
+  applyState(cloudState);
+  localStorage.setItem(storageKey, JSON.stringify(state));
+  render();
+  isApplyingCloudState = false;
+  rememberCloudSync(cloudUpdatedAt, state);
+  closeDialog(cloudConflictDialog);
+  setAuthStatus(currentUser.email);
+  setCloudStatus("Cloud loaded", "saved");
+}
+
+function closeDialog(dialog) {
+  if (dialog.open) {
+    dialog.close();
+  } else {
+    dialog.removeAttribute("open");
+  }
+}
+
+function showCloudConflictDialog() {
+  setCloudStatus("Conflict", "error");
+  if (typeof cloudConflictDialog.showModal === "function") {
+    cloudConflictDialog.showModal();
+  } else {
+    cloudConflictDialog.setAttribute("open", "");
+  }
+}
+
+function stateSignature(nextState) {
+  return JSON.stringify({
+    version: nextState.version,
+    currency: nextState.currency,
+    mealCount: nextState.mealCount,
+    expiryWindowDays: nextState.expiryWindowDays,
+    baselineBoxPrice: nextState.baselineBoxPrice,
+    accounts: nextState.accounts
+  });
 }
 
 function applyState(nextState) {
@@ -274,6 +413,7 @@ function applyState(nextState) {
   state.mealCount = normalizedState.mealCount;
   state.expiryWindowDays = normalizedState.expiryWindowDays;
   state.baselineBoxPrice = normalizedState.baselineBoxPrice;
+  state.updatedAt = normalizedState.updatedAt;
   state.accounts = normalizedState.accounts;
   currencyInput.value = state.currency;
   mealCountInput.value = state.mealCount;
@@ -298,6 +438,15 @@ function render() {
     row.classList.toggle("is-unsubscribed", !account.isSubscribed);
     row.classList.toggle("is-ready", isReadyForResubscription(account));
     row.classList.toggle("is-inactive", !account.isSubscribed || metrics.remainingBoxCount === 0);
+
+    row.addEventListener("dragover", allowAccountDrop);
+    row.addEventListener("dragleave", (event) => event.currentTarget.classList.remove("is-drop-target"));
+    row.addEventListener("drop", (event) => dropAccount(event, account.id));
+    row.addEventListener("dragend", endAccountDrag);
+
+    const dragHandle = row.querySelector('[data-action="drag"]');
+    dragHandle.addEventListener("dragstart", (event) => startAccountDrag(event, account.id));
+    dragHandle.addEventListener("keydown", (event) => moveAccountWithKeyboard(event, account.id));
 
     row.querySelectorAll("[data-field]").forEach((field) => {
       const key = field.dataset.field;
@@ -336,6 +485,7 @@ function render() {
     rowsElement.append(row);
   });
 
+  renderRecommendation(rankedAccounts);
   renderSummary(rankedAccounts);
   renderActions(rankedAccounts);
   notifyReadyAccounts();
@@ -419,6 +569,60 @@ function renderSummary(rankedAccounts) {
   document.querySelector("#cycleSaving").textContent = cycleSaving === null ? "-" : formatMoney(cycleSaving);
 }
 
+function renderRecommendation(rankedAccounts) {
+  const availableAccounts = rankedAccounts.filter(({ metrics }) => metrics.isAvailable);
+  const readyAccounts = rankedAccounts.filter(({ account }) => isReadyForResubscription(account));
+  const expiringAccounts = availableAccounts.filter(({ metrics }) => metrics.offerExpiring);
+  const best = availableAccounts[0];
+
+  recommendationBanner.className = "recommendation-banner";
+
+  if (readyAccounts.length > 0) {
+    const labels = readyAccounts.map(({ account }) => getAccountLabel(account)).join(", ");
+    recommendationBanner.classList.add("recommendation-banner--ready");
+    setRecommendationContent(
+      "Ready to rotate",
+      `${labels} ${readyAccounts.length === 1 ? "is" : "are"} ready to resubscribe.`,
+      "The 4-week wait is complete. Resubscribe when you want to start a fresh offer cycle."
+    );
+    return;
+  }
+
+  if (!best) {
+    setRecommendationContent(
+      "No order recommendation yet",
+      "Add prices or resubscribe an account.",
+      "The dashboard needs at least one subscribed account with a configured box or delivery price."
+    );
+    return;
+  }
+
+  const reasons = [
+    `${withDessert(best.metrics.nextWeekLabel, best.account)} is currently the best next box`,
+    `${formatMoney(best.metrics.averageMealPrice)} per meal`
+  ];
+  if (toNumber(best.account.creditBalance, 0) > 0) reasons.push(`${formatMoney(best.account.creditBalance)} credit available`);
+  if (best.account.freeDessert) reasons.push("free dessert included");
+  if (best.metrics.offerExpiring) reasons.push("offer expires soon");
+  if (expiringAccounts.length > 1) reasons.push(`${expiringAccounts.length} active offers are inside the expiry window`);
+
+  setRecommendationContent(
+    "Smart recommendation",
+    `Order from ${getAccountLabel(best.account)} next.`,
+    `${reasons.join(" · ")}.`
+  );
+}
+
+function setRecommendationContent(label, title, description) {
+  const labelElement = document.createElement("span");
+  labelElement.textContent = label;
+  const titleElement = document.createElement("strong");
+  titleElement.textContent = title;
+  const descriptionElement = document.createElement("p");
+  descriptionElement.textContent = description;
+  recommendationBanner.replaceChildren(labelElement, titleElement, descriptionElement);
+}
+
 function renderActions(rankedAccounts) {
   const actionList = document.querySelector("#actionList");
   const subscribedAccounts = rankedAccounts.filter(({ metrics }) => metrics.isAvailable);
@@ -448,6 +652,54 @@ function renderActions(rankedAccounts) {
     item.textContent = action;
     return item;
   }));
+}
+
+function startAccountDrag(event, accountId) {
+  draggedAccountId = accountId;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", accountId);
+  rowsElement.querySelector(`[data-id="${accountId}"]`)?.classList.add("is-dragging");
+}
+
+function allowAccountDrop(event) {
+  if (!draggedAccountId) return;
+  event.preventDefault();
+  event.currentTarget.classList.add("is-drop-target");
+}
+
+function dropAccount(event, targetAccountId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove("is-drop-target");
+  const sourceAccountId = event.dataTransfer.getData("text/plain") || draggedAccountId;
+  moveAccount(sourceAccountId, targetAccountId);
+}
+
+function endAccountDrag() {
+  draggedAccountId = "";
+  rowsElement.querySelectorAll(".is-dragging, .is-drop-target").forEach((row) => row.classList.remove("is-dragging", "is-drop-target"));
+}
+
+function moveAccount(sourceAccountId, targetAccountId) {
+  if (!sourceAccountId || sourceAccountId === targetAccountId) return;
+  const sourceIndex = state.accounts.findIndex((account) => account.id === sourceAccountId);
+  const targetIndex = state.accounts.findIndex((account) => account.id === targetAccountId);
+  if (sourceIndex < 0 || targetIndex < 0) return;
+
+  const [sourceAccount] = state.accounts.splice(sourceIndex, 1);
+  state.accounts.splice(targetIndex, 0, sourceAccount);
+  saveAndRender();
+}
+
+function moveAccountWithKeyboard(event, accountId) {
+  if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  const currentIndex = state.accounts.findIndex((account) => account.id === accountId);
+  const targetIndex = event.key === "ArrowUp" ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= state.accounts.length) return;
+
+  const [account] = state.accounts.splice(currentIndex, 1);
+  state.accounts.splice(targetIndex, 0, account);
+  saveAndRender();
 }
 
 function createWeekControl(account, discountValue, cycleIndex) {
@@ -570,29 +822,29 @@ function isReadyForResubscription(account) {
 }
 
 function getResubscribeCountdown(account) {
-    if (account.isSubscribed) return "";
-    const targetDate = getResubscriptionDate(account);
-    if (!targetDate) return "Set an unsubscribe date";
-    const daysRemaining = daysUntil(targetDate);
-    return daysRemaining <= 0 ? "Ready now" : `Resubscribe in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`;
-  }
+  if (account.isSubscribed) return "";
+  const targetDate = getResubscriptionDate(account);
+  if (!targetDate) return "Set an unsubscribe date";
+  const daysRemaining = daysUntil(targetDate);
+  return daysRemaining <= 0 ? "Ready now" : `Resubscribe in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`;
+}
 
 function notifyReadyAccounts() {
-    const readyAccounts = state.accounts.filter(isReadyForResubscription);
-    const notificationRegion = document.querySelector("#notificationRegion");
-    if (!readyAccounts.length) {
-      notificationRegion.replaceChildren();
-      lastReadyNotificationKey = "";
-      return;
-    }
+  const readyAccounts = state.accounts.filter(isReadyForResubscription);
+  const notificationRegion = document.querySelector("#notificationRegion");
+  if (!readyAccounts.length) {
+    notificationRegion.replaceChildren();
+    lastReadyNotificationKey = "";
+    return;
+  }
 
-    const notificationKey = readyAccounts.map((account) => account.id).sort().join(",");
-    if (notificationKey === lastReadyNotificationKey) return;
-    lastReadyNotificationKey = notificationKey;
-    const message = document.createElement("div");
-    message.className = "ready-notification";
-    message.textContent = `${readyAccounts.map(getAccountLabel).join(", ")} ${readyAccounts.length === 1 ? "is" : "are"} ready to resubscribe.`;
-    notificationRegion.replaceChildren(message);
+  const notificationKey = readyAccounts.map((account) => account.id).sort().join(",");
+  if (notificationKey === lastReadyNotificationKey) return;
+  lastReadyNotificationKey = notificationKey;
+  const message = document.createElement("div");
+  message.className = "ready-notification";
+  message.textContent = `${readyAccounts.map(getAccountLabel).join(", ")} ${readyAccounts.length === 1 ? "is" : "are"} ready to resubscribe.`;
+  notificationRegion.replaceChildren(message);
 }
 
 function resetOfferValues(account) {
